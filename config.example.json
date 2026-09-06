@@ -1,0 +1,13 @@
+{
+  "port": "COM3",
+  "baudrate": null,
+  "timeout": 30.0,
+  "fast": false,
+  "reconnect_attempts": 3,
+  "reconnect_delay": 2.0,
+  "transport": "stdio",
+  "host": "127.0.0.1",
+  "http_port": 8000,
+  "log_level": "INFO"
+}
+
