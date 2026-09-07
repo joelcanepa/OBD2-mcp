@@ -112,8 +112,8 @@ For example, a desktop MCP client may use this Windows configuration:
 {
   "mcpServers": {
     "obd2": {
-      "command": "C:\\path\\to\\ODB2-mcp\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "obd_mcp.server", "--config", "C:\\path\\to\\ODB2-mcp\\config.json"]
+      "command": "C:\\path\\to\\OBD2-mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "obd_mcp.server", "--config", "C:\\path\\to\\OBD2-mcp\\config.json"]
     }
   }
 }
