@@ -141,6 +141,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Server JSON file (default: ./config.json; auto-connect is used when absent)",
     )
     parser.add_argument("--port", help="Override the serial port in the configuration")
+    parser.add_argument(
+        "--simulation",
+        action="store_true",
+        help="Start the MCP server with generated OBD-II data and no vehicle connection",
+    )
     return parser.parse_args(argv)
 
 
@@ -153,6 +158,8 @@ async def run(args: argparse.Namespace) -> None:
         raise FileNotFoundError(f"Configuration file does not exist: {args.config}")
     if args.port:
         server_args.extend(["--port", args.port])
+    if args.simulation:
+        server_args.append("--simulation")
     parameters = StdioServerParameters(command=sys.executable, args=server_args, cwd=Path.cwd())
     print(f"Starting MCP server: {sys.executable} {' '.join(server_args)}")
     async with stdio_client(parameters) as (read_stream, write_stream):

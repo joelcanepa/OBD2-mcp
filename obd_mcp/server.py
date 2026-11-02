@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from .config import Settings, load_settings, parse_args
 from .connection import ConnectionManager
 from .obd_service import OBDService
+from .simulation import SimulatedConnection
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 def create_server(settings: Settings | None = None) -> FastMCP:
     """Build an independently testable MCP server instance."""
     current = settings or load_settings()
-    manager = ConnectionManager(current)
+    factory = SimulatedConnection if current.simulation else None
+    manager = ConnectionManager(current) if factory is None else ConnectionManager(current, factory=factory)
     service = OBDService(manager)
 
     @asynccontextmanager
@@ -28,6 +30,8 @@ def create_server(settings: Settings | None = None) -> FastMCP:
             connected = await service.connect()
             if not connected:
                 logger.warning("Server started without an ECU; tools will retry on demand")
+            elif current.simulation:
+                logger.info("OBD-II simulation mode is active; no vehicle connection is being used")
             yield
         finally:
             await service.close()

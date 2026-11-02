@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from obd_mcp.config import ConfigurationError, load_settings
+from obd_mcp.config import ConfigurationError, load_settings, parse_args
 
 
 def test_precedence_cli_environment_json(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -23,4 +23,10 @@ def test_precedence_cli_environment_json(tmp_path) -> None:  # type: ignore[no-u
 def test_invalid_boolean_is_rejected() -> None:
     with pytest.raises(ConfigurationError):
         load_settings(environ={"OBD_FAST": "sometimes"})
+
+
+def test_simulation_can_be_enabled_from_cli_or_environment() -> None:
+    cli_settings, _ = parse_args(["--simulation"])
+    assert cli_settings.simulation is True
+    assert load_settings(environ={"OBD_SIMULATION": "true"}).simulation is True
 

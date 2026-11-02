@@ -64,7 +64,12 @@ class ConnectionManager:
                     if self._is_connected(self._connection):
                         self._supported_commands = frozenset(self._connection.supported_commands)
                         self._last_error = None
-                        logger.info("OBD-II connected on %s", self.settings.port or "auto-detected port")
+                        endpoint = (
+                            "simulation"
+                            if self.settings.simulation
+                            else self.settings.port or "auto-detected port"
+                        )
+                        logger.info("OBD-II connected on %s", endpoint)
                         return True
                     self._last_error = "ELM327 found but no ECU connection (is ignition on?)"
                 except Exception as exc:
@@ -126,10 +131,11 @@ class ConnectionManager:
             return {
                 "connected": connected,
                 "status": raw_status,
-                "port": self.settings.port or "auto",
+                "port": "simulation" if self.settings.simulation else self.settings.port or "auto",
                 "protocol": protocol,
                 "supported_command_count": len(self._supported_commands),
                 "last_error": self._last_error,
+                "simulation": self.settings.simulation,
             }
 
     def close(self) -> None:

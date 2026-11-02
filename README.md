@@ -1,6 +1,7 @@
 # OBD-II MCP Server
 
 A local Python MCP server that lets an AI client read OBD-II diagnostics from a vehicle through a paired ELM327 Bluetooth adapter.
+It can also run in simulation mode with generated vehicle data, without an adapter or vehicle.
 
 ## What it does
 
@@ -15,6 +16,8 @@ The server exposes six MCP tools:
 
 `python-obd` discovers the vehicle's supported PID blocks at connection time. The server publishes only sensors found in those blocks, serializes access to the COM port, and reconnects once after a communication failure.
 
+In simulation mode, the same six tools run through an in-process virtual connection. It advertises common sensors such as RPM, speed, coolant temperature, engine load, throttle position, intake data, MAF, fuel level, voltage, run time, and MIL distance. It also provides a simulated VIN, protocol, MIL status, and stored/pending DTCs. Clearing DTCs updates the simulator's state until the server restarts.
+
 ## Requirements
 
 - Python 3.10 or newer.
@@ -23,6 +26,8 @@ The server exposes six MCP tools:
 - On Windows, a Bluetooth **outgoing** COM port assigned to the adapter.
 
 BLE-only adapters frequently do not provide a serial port and cannot be used directly with `python-obd`.
+
+An adapter and vehicle are not required when using `--simulation`.
 
 ## Install
 
@@ -46,7 +51,8 @@ Edit `config.json` and set `port` to the adapter's outgoing COM port:
   "transport": "stdio",
   "host": "127.0.0.1",
   "http_port": 8000,
-  "log_level": "INFO"
+  "log_level": "INFO",
+  "simulation": false
 }
 ```
 
@@ -62,6 +68,23 @@ Edit `config.json` and set `port` to the adapter's outgoing COM port:
 | `OBD_RECONNECT_DELAY` | `2` |
 | `OBD_MCP_TRANSPORT` | `stdio` or `streamable-http` |
 | `OBD_MCP_HOST`, `OBD_MCP_HTTP_PORT` | `127.0.0.1`, `8000` |
+| `OBD_SIMULATION` | `true` or `false` |
+
+## Simulation mode
+
+Start a Streamable HTTP server with generated data and no ELM327 connection:
+
+```powershell
+.venv\Scripts\python.exe -m obd_mcp.server --simulation --transport streamable-http
+```
+
+Or start it over stdio:
+
+```powershell
+.venv\Scripts\python.exe -m obd_mcp.server --simulation
+```
+
+Simulation can also be enabled with `"simulation": true` in the JSON configuration or with `OBD_SIMULATION=true`. Command-line options have the highest precedence, so `--no-simulation` disables a value enabled by the environment or configuration file. Standard hardware mode remains the default.
 
 ## Windows Bluetooth setup
 
@@ -131,6 +154,12 @@ The validator starts a temporary **stdio** server process itself, negotiates MCP
 
 ```powershell
 .venv\Scripts\python.exe scripts\mcp_terminal_tester.py --config config.json
+```
+
+To exercise the complete MCP flow without a vehicle:
+
+```powershell
+.venv\Scripts\python.exe scripts\mcp_terminal_tester.py --simulation
 ```
 
 Option 8 runs a non-destructive connectivity check: connection status, supported sensors, vehicle information, and DTCs. Option 7 requires typing `CLEAR` before it sends `confirm: true`.

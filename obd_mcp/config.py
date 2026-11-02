@@ -29,6 +29,7 @@ class Settings:
     host: str = "127.0.0.1"
     http_port: int = 8000
     log_level: str = "INFO"
+    simulation: bool = False
 
     def __post_init__(self) -> None:
         if self.timeout <= 0:
@@ -52,6 +53,7 @@ _ENV_MAP = {
     "OBD_MCP_HOST": "host",
     "OBD_MCP_HTTP_PORT": "http_port",
     "OBD_MCP_LOG_LEVEL": "log_level",
+    "OBD_SIMULATION": "simulation",
 }
 
 
@@ -62,7 +64,7 @@ def _coerce(name: str, value: Any) -> Any:
         return int(value)
     if name in {"timeout", "reconnect_delay"}:
         return float(value)
-    if name == "fast" and isinstance(value, str):
+    if name in {"fast", "simulation"} and isinstance(value, str):
         normalized = value.strip().lower()
         if normalized not in {"1", "0", "true", "false", "yes", "no", "on", "off"}:
             raise ConfigurationError(f"Invalid boolean value for {name}: {value!r}")
@@ -118,6 +120,13 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, argparse.Namesp
     parser.add_argument("--host")
     parser.add_argument("--http-port", type=int)
     parser.add_argument("--log-level")
+    parser.add_argument(
+        "--simulation",
+        "-simulation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use generated OBD-II data without connecting to an ELM327 adapter",
+    )
     args = parser.parse_args(argv)
     overrides = {
         "port": args.port,
@@ -130,5 +139,6 @@ def parse_args(argv: list[str] | None = None) -> tuple[Settings, argparse.Namesp
         "host": args.host,
         "http_port": args.http_port,
         "log_level": args.log_level,
+        "simulation": args.simulation,
     }
     return load_settings(args.config, overrides=overrides), args
