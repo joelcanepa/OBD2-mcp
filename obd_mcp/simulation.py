@@ -5,9 +5,29 @@ from __future__ import annotations
 import math
 import threading
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
-import obd
+try:
+    import obd
+except ImportError:
+    @dataclass(frozen=True)
+    class _FallbackCommand:
+        name: str
+
+    class _FallbackCommands(dict[str, _FallbackCommand]):
+        def __missing__(self, name: str) -> _FallbackCommand:
+            command = _FallbackCommand(name)
+            self[name] = command
+            return command
+
+    obd = SimpleNamespace(
+        commands=_FallbackCommands(),
+        OBDStatus=SimpleNamespace(
+            NOT_CONNECTED="NOT_CONNECTED",
+            CAR_CONNECTED="CAR_CONNECTED",
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -33,11 +53,17 @@ class SimulatedResponse:
     value: Any
 
     def is_null(self) -> bool:
+        """Mirror python-OBD's null-response predicate."""
         return self.value is None
 
 
 class SimulatedConnection:
-    """A deterministic, stateful stand-in for ``obd.OBD``."""
+    """Provide a deterministic, stateful stand-in for ``obd.OBD``.
+
+    Sensor values vary smoothly according to a shared sample counter. DTC state
+    persists for the life of the instance, so clearing codes affects subsequent
+    reads just as it would for one running vehicle session.
+    """
 
     SENSOR_NAMES = (
         "RPM",
@@ -55,6 +81,7 @@ class SimulatedConnection:
     )
 
     def __init__(self, *_: Any, **__: Any) -> None:
+        """Initialize a connected simulator with sensors and example DTCs."""
         self._closed = False
         self._sample = 0
         self._lock = threading.Lock()
@@ -71,12 +98,15 @@ class SimulatedConnection:
         }
 
     def status(self) -> Any:
+        """Return the python-OBD status matching the simulator lifecycle."""
         return obd.OBDStatus.NOT_CONNECTED if self._closed else obd.OBDStatus.CAR_CONNECTED
 
     def protocol_name(self) -> str:
+        """Return a realistic CAN protocol label marked as simulated."""
         return "ISO 15765-4 (CAN 11/500) [simulation]"
 
     def close(self) -> None:
+        """Mark the virtual connection as closed."""
         self._closed = True
 
     def query(self, command: Any) -> SimulatedResponse:

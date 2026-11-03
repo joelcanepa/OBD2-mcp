@@ -18,7 +18,18 @@ logger = logging.getLogger(__name__)
 
 
 def create_server(settings: Settings | None = None) -> FastMCP:
-    """Build an independently testable MCP server instance."""
+    """Build an independently testable MCP server instance.
+
+    Args:
+        settings: Runtime configuration. Defaults are loaded when omitted.
+
+    Returns:
+        A configured FastMCP application with six OBD-II tools.
+
+    Note:
+        The application lifespan owns connection startup and shutdown. Failure
+        to connect during startup is non-fatal because each tool retries later.
+    """
     current = settings or load_settings()
     factory = SimulatedConnection if current.simulation else None
     manager = ConnectionManager(current) if factory is None else ConnectionManager(current, factory=factory)
@@ -107,7 +118,7 @@ mcp = create_server()
 
 
 def main() -> None:
-    """Run the configured MCP transport."""
+    """Load configuration, initialize logging, and run the selected transport."""
     settings, _ = parse_args()
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper(), logging.INFO),

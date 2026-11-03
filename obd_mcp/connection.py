@@ -27,7 +27,17 @@ ConnectionFactory = Callable[..., Any]
 
 
 class ConnectionManager:
-    """Own one python-OBD connection and serialize all adapter operations."""
+    """Own one python-OBD connection and serialize adapter operations.
+
+    The manager is the synchronization boundary of the application. Its
+    re-entrant lock protects connection state and ensures that only one caller
+    exchanges messages with the serial adapter at a time.
+
+    Args:
+        settings: Connection and retry configuration.
+        factory: Callable compatible with ``obd.OBD``. Dependency injection is
+            used here by tests and by simulation mode.
+    """
 
     def __init__(self, settings: Settings, factory: ConnectionFactory = obd.OBD) -> None:
         self.settings = settings
@@ -39,6 +49,11 @@ class ConnectionManager:
 
     @staticmethod
     def _is_connected(connection: Any | None) -> bool:
+        """Return whether a driver object reports a live ECU connection.
+
+        Driver exceptions are interpreted as a disconnected state so status
+        checks remain safe during cable, Bluetooth, or ECU failures.
+        """
         if connection is None:
             return False
         try:
@@ -48,7 +63,15 @@ class ConnectionManager:
             return False
 
     def connect(self) -> bool:
-        """Connect with bounded retries and cache the PIDs discovered by python-OBD."""
+        """Connect with bounded retries and cache discovered commands.
+
+        Already-live connections are reused. Between attempts, the method waits
+        ``reconnect_delay * attempt`` seconds, producing a linear backoff.
+
+        Returns:
+            ``True`` after a live ECU connection is established; otherwise
+            ``False`` after all configured attempts have been exhausted.
+        """
         with self._lock:
             if self._is_connected(self._connection):
                 return True
@@ -81,14 +104,33 @@ class ConnectionManager:
             return False
 
     def ensure_connected(self) -> Any:
-        """Return a live connection, reconnecting first when required."""
+        """Return a live driver connection, reconnecting when required.
+
+        Raises:
+            OBDConnectionError: If no connection can be established.
+        """
         with self._lock:
             if not self._is_connected(self._connection) and not self.connect():
                 raise OBDConnectionError(self._last_error or "OBD-II adapter is not connected")
             return self._connection
 
     def execute(self, operation: Callable[[Any], Any]) -> Any:
-        """Execute an operation exclusively and retry once after a dropped connection."""
+        """Run one adapter operation exclusively, retrying once after failure.
+
+        Args:
+            operation: Synchronous callback receiving the live driver object.
+
+        Returns:
+            The callback result.
+
+        Raises:
+            OBDConnectionError: If the initial connection or reconnection fails.
+            OBDCommunicationError: If the retried operation also fails.
+
+        Note:
+            The entire callback runs under the manager lock. Callbacks must be
+            short and must not call unrelated blocking application code.
+        """
         with self._lock:
             connection = self.ensure_connected()
             try:
@@ -144,6 +186,7 @@ class ConnectionManager:
             self._close_unlocked()
 
     def _close_unlocked(self) -> None:
+        """Close and reset state while the caller already holds ``_lock``."""
         if self._connection is not None:
             try:
                 self._connection.close()

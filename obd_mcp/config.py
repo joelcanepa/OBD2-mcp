@@ -17,7 +17,24 @@ class ConfigurationError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """Runtime settings, populated from JSON, environment, and CLI options."""
+    """Store validated runtime settings.
+
+    Values are merged by :func:`load_settings`; constructing this class directly
+    still applies the range checks in :meth:`__post_init__`.
+
+    Attributes:
+        port: Serial port used by the ELM327, or ``None`` for auto-detection.
+        baudrate: Explicit serial speed, or ``None`` for driver detection.
+        timeout: Maximum number of seconds allowed for adapter operations.
+        fast: Whether python-OBD may skip conservative initialization steps.
+        reconnect_attempts: Maximum attempts in one connection cycle.
+        reconnect_delay: Base delay used by the linear retry backoff.
+        transport: MCP transport exposed by the server.
+        host: Bind address used by the HTTP transport.
+        http_port: TCP port used by the HTTP transport.
+        log_level: Python logging level name.
+        simulation: Whether to replace the hardware driver with the simulator.
+    """
 
     port: str | None = None
     baudrate: int | None = None
@@ -58,6 +75,19 @@ _ENV_MAP = {
 
 
 def _coerce(name: str, value: Any) -> Any:
+    """Convert a configuration value to the type expected by ``Settings``.
+
+    Args:
+        name: Name of the destination setting.
+        value: Raw value read from JSON, the environment, or a CLI override.
+
+    Returns:
+        The converted value. Unknown setting names are returned unchanged.
+
+    Raises:
+        ConfigurationError: If a textual Boolean is not recognized.
+        ValueError: If a numeric value cannot be converted.
+    """
     if value is None:
         return None
     if name in {"baudrate", "reconnect_attempts", "http_port"}:
@@ -78,7 +108,24 @@ def load_settings(
     environ: Mapping[str, str] | None = None,
     overrides: Mapping[str, Any] | None = None,
 ) -> Settings:
-    """Load settings with precedence CLI overrides > environment > JSON > defaults."""
+    """Load and validate settings from every supported source.
+
+    Precedence is ``overrides > environment > JSON > defaults``. An override
+    whose value is ``None`` is ignored, which lets argparse distinguish between
+    an omitted option and a deliberate false-y value.
+
+    Args:
+        config_path: Optional JSON configuration file.
+        environ: Environment mapping; defaults to :data:`os.environ`.
+        overrides: Usually command-line values keyed by setting name.
+
+    Returns:
+        A validated, immutable :class:`Settings` instance.
+
+    Raises:
+        ConfigurationError: If the file is unreadable, malformed, contains an
+            unknown key, or selects an unsupported transport.
+    """
     values: dict[str, Any] = asdict(Settings())
     if config_path is not None:
         path = Path(config_path)
@@ -107,7 +154,15 @@ def load_settings(
 
 
 def parse_args(argv: list[str] | None = None) -> tuple[Settings, argparse.Namespace]:
-    """Parse server command-line arguments and return merged settings."""
+    """Parse command-line arguments and merge all configuration sources.
+
+    Args:
+        argv: Arguments without the executable name. Uses ``sys.argv`` when
+            omitted.
+
+    Returns:
+        A pair containing the merged settings and raw argparse namespace.
+    """
     parser = argparse.ArgumentParser(description="MCP server for ELM327 OBD-II adapters")
     parser.add_argument("--config", help="Path to a JSON configuration file")
     parser.add_argument("--port", help="Serial port; omit for python-OBD auto-connect")

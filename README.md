@@ -3,6 +3,14 @@
 A local Python MCP server that lets an AI client read OBD-II diagnostics from a vehicle through a paired ELM327 Bluetooth adapter.
 It can also run in simulation mode with generated vehicle data, without an adapter or vehicle.
 
+## Documentation
+
+- [Architecture and concepts](docs/ARCHITECTURE.md) — components, request flows,
+  concurrency, reconnection, simulation, error model, and analogies for the
+  non-obvious logic.
+- Public Python modules, classes, and functions include PEP 257-style docstrings
+  describing their contracts and side effects.
+
 ## What it does
 
 The server exposes six MCP tools:

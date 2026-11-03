@@ -27,6 +27,7 @@ _NON_SENSOR_NAMES = {
 
 
 def _command_name(command: Any) -> str:
+    """Return a stable textual name for a python-OBD command."""
     return str(command.name)
 
 
@@ -47,22 +48,34 @@ def _json_value(value: Any) -> dict[str, Any]:
 
 
 class OBDService:
-    """Expose asynchronous OBD-II use cases over the synchronous driver."""
+    """Expose asynchronous, JSON-safe use cases over the synchronous driver.
+
+    Each public coroutine moves blocking serial work to a worker thread. The
+    injected :class:`ConnectionManager` remains responsible for serialization,
+    reconnection, and connection ownership.
+
+    Args:
+        manager: Shared connection manager for this service instance.
+    """
 
     def __init__(self, manager: ConnectionManager) -> None:
         self.manager = manager
 
     async def connect(self) -> bool:
+        """Open the OBD-II connection without blocking the event loop."""
         return await asyncio.to_thread(self.manager.connect)
 
     async def close(self) -> None:
+        """Close the underlying connection without blocking the event loop."""
         await asyncio.to_thread(self.manager.close)
 
     async def connection_status(self) -> dict[str, Any]:
+        """Attempt connection and return a JSON-safe status snapshot."""
         await asyncio.to_thread(self.manager.connect)
         return await asyncio.to_thread(self.manager.status)
 
     def _list_sensors_sync(self) -> list[dict[str, str]]:
+        """Build the sorted sensor catalog from discovered OBD commands."""
         commands = self.manager.supported_commands
         sensors = [
             {"name": _command_name(cmd), "description": str(cmd.desc)}
@@ -73,9 +86,16 @@ class OBDService:
         return sorted(sensors, key=lambda item: item["name"])
 
     async def list_supported_sensors(self) -> list[dict[str, str]]:
+        """Return live-data commands advertised by the connected vehicle."""
         return await asyncio.to_thread(self._list_sensors_sync)
 
     def _resolve_sensor(self, name: str) -> Any:
+        """Resolve and validate a user-provided sensor name.
+
+        Raises:
+            UnsupportedCommandError: If the name is unknown, is not a sensor,
+                or was not advertised by the current vehicle.
+        """
         normalized = name.strip().upper()
         try:
             command = obd.commands[normalized]
@@ -86,6 +106,7 @@ class OBDService:
         return command
 
     def _read_sensors_sync(self, names: list[str]) -> list[dict[str, Any]]:
+        """Read a batch of sensors in one serialized connection operation."""
         if not names:
             raise ValueError("At least one sensor name is required")
         commands = [(name.strip().upper(), self._resolve_sensor(name)) for name in names]
@@ -103,10 +124,17 @@ class OBDService:
         return cast(list[dict[str, Any]], self.manager.execute(read_all))
 
     async def read_sensors(self, names: list[str]) -> list[dict[str, Any]]:
+        """Read sensor names and return values, units, or per-sensor errors.
+
+        Raises:
+            ValueError: If ``names`` is empty.
+            UnsupportedCommandError: If any requested sensor is unavailable.
+        """
         return await asyncio.to_thread(self._read_sensors_sync, names)
 
     @staticmethod
     def _parse_dtc_response(response: Any, kind: str) -> list[dict[str, str]]:
+        """Normalize one python-OBD DTC response into JSON-safe records."""
         if response is None or response.is_null() or not response.value:
             return []
         return [
@@ -129,6 +157,7 @@ class OBDService:
         return cast(list[dict[str, str]], self.manager.execute(query))
 
     async def read_dtc(self) -> list[dict[str, str]]:
+        """Return stored and pending/current-cycle diagnostic codes."""
         return await asyncio.to_thread(self._read_dtc_sync)
 
     def _clear_dtc_sync(self) -> dict[str, Any]:
@@ -147,6 +176,11 @@ class OBDService:
         return cast(dict[str, Any], self.manager.execute(clear))
 
     async def clear_dtc(self) -> dict[str, Any]:
+        """Send the destructive ECU command that clears diagnostic codes.
+
+        Confirmation is enforced by the MCP boundary, not by this lower-level
+        service method.
+        """
         return await asyncio.to_thread(self._clear_dtc_sync)
 
     def _vehicle_info_sync(self) -> dict[str, Any]:
@@ -169,4 +203,5 @@ class OBDService:
         return cast(dict[str, Any], self.manager.execute(query))
 
     async def vehicle_info(self) -> dict[str, Any]:
+        """Return available VIN, MIL, DTC-count, and protocol information."""
         return await asyncio.to_thread(self._vehicle_info_sync)
